@@ -8,10 +8,10 @@ geo<-"tract"
 
 state<-fips_codes %>% select(state_code, state_name) %>% distinct() %>% filter(!state_code %in% c(60, 66, 69, 72, 74, 78)) %>% select(state_code)
 
-if(!exists("data/acs_covars.rds")){
+if(!file.exists("data/acs_covars.rds")){
   source("scripts/01_get_acs.R") 
 }
-if(exists("data/acs_covars.rds")){
+if(file.exists("data/acs_covars.rds")){
 acs_covars<-  read_rds("data/acs_covars.rds")
 }
 
