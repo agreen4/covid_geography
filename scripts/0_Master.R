@@ -9,11 +9,20 @@ geo<-"tract"
 #Download Eviction Lab Data
 #https://evictionlab.org/eviction-tracking/get-the-data/
 #Need to check date to download most up to date file.
+
 eviction_lab_data<-read_csv("https://evictionlab.org/uploads/all_sites_20201121.csv")
-eviction_lab_tracts<-eviction_lab_data %>% select(GEOID, city, type) %>% distinct()
-eviction_lab_tracts<-eviction_lab_tracts %>% filter(GEOID != "sealed", type == "Census Tract")
-state<-eviction_lab_tracts %>% filter(type == "Census Tract") %>% mutate(GEOID = substr(GEOID, 0, 2)) %>% select(GEOID) %>% distinct()
-state<-state %>% filter(GEOID != "se")
+
+eviction_lab_tracts<-eviction_lab_data %>% 
+  dplyr::select(GEOID, city, type) %>% 
+  distinct()%>% 
+  filter(GEOID != "sealed", type == "Census Tract")
+
+state<-eviction_lab_tracts %>% 
+  filter(type == "Census Tract") %>% 
+  mutate(GEOID = substr(GEOID, 0, 2)) %>% 
+  dplyr::select(GEOID) %>% 
+  distinct() %>% 
+  filter(GEOID != "se")
 
 # Manually get census tracts associated with Eviction Lab places
 # if(!file.exists("data/eviction_lab_tracts.rds")){
@@ -38,23 +47,38 @@ acs_covars<- read_rds("data/acs_covars.rds")
 #Join to select Eviction Lab Tracts
 
 dataset_tract<-left_join(eviction_lab_tracts, acs_covars, by="GEOID")
-saveRDS(dataset_tract, "data/dataset_tract.rds")
+#saveRDS(dataset_tract, "data/dataset_tract.rds")
 
 #Remove tracts with no population and select variables to cluster
-dataset_cluster<-dataset_tract %>% filter(pop_tot > 0)%>% dplyr::select(GEOID, city, under18, over65, P_Female, PNH_White, PNH_Black, PNH_Asian, PNH_Other, PLatino, PForeignborn, P_FHHH, Pov, MHHI, Rvac, P_Rent, MHV, OCB, RCB, MGR, ServOccup, Mobility, Commute, PCI, P_NoCar, essential)
-
-
+dataset_cluster<-dataset_tract %>% 
+  filter(pop_tot > 0) %>% 
+  dplyr::select(GEOID, city, under18, over65, PNH_White, PNH_Black, PNH_Asian, PNH_Other, PLatino, PForeignborn, P_FHHH, Pov, MHHI, Rvac, P_Rent, MHV, OCB, RCB, MGR, ServOccup, Mobility, Commute, PCI, P_NoCar, conman, food, health, protection, socialservices, transport)
 
 # Perform single imputation based upon variables with no missing values
-dataset_cluster %>% summarise_all(funs(sum(is.na(.)))) %>% View()
-dataset_cluster<-dataset_cluster %>% group_by(city) %>% impute_lm(P_FHHH+Pov+MHHI+Rvac+P_Rent+MHV+OCB+RCB+MGR+ServOccup+Commute+PCI+P_NoCar+essential ~ under18+over65+P_Female+PNH_White+PNH_Black+PNH_Asian+PLatino+PForeignborn+Mobility)
-dataset_cluster %>% ungroup()%>% summarise_all(funs(sum(is.na(.)))) %>% View()
+dataset_cluster %>% summarise_all(funs(sum(is.na(.))))
+dataset_cluster<-dataset_cluster %>% 
+  group_by(city) %>% 
+  impute_lm(P_FHHH+Pov+MHHI+Rvac+P_Rent+MHV+OCB+RCB+MGR+ServOccup+Commute+PCI+P_NoCar+conman + food + health + protection + socialservices + transport ~ under18+over65+PNH_White+PNH_Black+PNH_Asian+PLatino+PForeignborn+Mobility)
+dataset_cluster %>% 
+  ungroup()%>% 
+  summarise_all(funs(sum(is.na(.))))
+
+dataset_cluster %>% 
+  group_by(city) %>% 
+  summarise_if(is.numeric, mean, na.rm=TRUE) %>% 
+  dplyr::select(city, under18, over65, PForeignborn, P_FHHH, Pov, MHHI, Rvac, P_Rent, MHV, OCB, RCB, MGR, ServOccup, Mobility, Commute, PCI, P_NoCar, conman, food, health, protection, socialservices, transport) %>% 
+  View()
 
 #Scale the data for PCA
-dataset_cluster_s<-dataset_cluster %>% group_by(city)%>% mutate(across(!GEOID,scale)) %>% select(-GEOID, -city)
+dataset_cluster_pca<-dataset_cluster %>% 
+  dplyr::select(city, under18, over65, PForeignborn, P_FHHH, Pov, MHHI, Rvac, P_Rent, MHV, OCB, RCB, MGR, ServOccup, Mobility, Commute, PCI, P_NoCar, conman, food, health, protection, socialservices, transport) %>% 
+  group_by(city)%>% 
+  mutate(across(under18:transport,scale)) %>% 
+  ungroup() %>% 
+  dplyr::select(-city)
 
 
--# # Visualize the tract data and the place geography which will be extracted
+# # Visualize the tract data and the place geography which will be extracted
 # ggplot()+geom_sf(data=place_geo)
 # #ggplot()+geom_sf(data=trt)
 # 
@@ -63,9 +87,10 @@ dataset_cluster_s<-dataset_cluster %>% group_by(city)%>% mutate(across(!GEOID,sc
 # dataset<-st_filter(trt, place_geo)
 # ggplot()+geom_sf(data=dataset)
 
-dataset_cluster_pca<-dataset_cluster_s %>% ungroup()%>% select(-GEOID, -city)
 
 fviz_nbclust(dataset_cluster_pca, kmeans, method = "gap_stat")
+
+fviz_nbclust(dataset_cluster_pca, kmeans, method = "wss")
 
 tracts.pca <- PCA(dataset_cluster_pca, graph = FALSE)
 #print(tracts.pca)
@@ -106,13 +131,24 @@ cluster_characteristics<-dataset_clusters %>% group_by(clust) %>% summarise_all(
 #write_csv(cluster_characteristics, file.path(paste0("output/", state,"_",place,"_cluster_char.csv")))
 
 
-dataset_cluster_s<-bind_cols(dataset_cluster_s, dataset_clusters %>% select(clust))
+dataset_cluster_s<-bind_cols(dataset_cluster_s, dataset_clusters %>% 
+                               dplyr::select(clust))
 
-dataset_cluster<-bind_cols(dataset_cluster, dataset_clusters %>% select(clust))
+dataset_cluster<-bind_cols(dataset_cluster, dataset_clusters %>% dplyr::select(clust))
 dataset_cluster %>% 
   group_by(clust) %>% 
   summarise(N = n(), across(under18:essential, mean, na.rm=TRUE)) %>% 
   View()
+
+dataset_cluster %>% 
+  group_by(city, clust) %>% 
+  summarise(N = n(), across(under18:essential, mean, na.rm=TRUE)) %>% 
+  View()
+
+
+
+
+
 
 
 #eviction <- read_csv("data/tracts.csv", col_types = cols(GEOID = col_character())) %>% filter(year == 2016) %>% select(GEOID, `eviction-filings`, evictions, `eviction-filing-rate`, `eviction-rate`)
