@@ -1,4 +1,5 @@
-library(purrr)
+library(pacman)
+p_load(purrr, tidycensus, tidyverse)
 
 get_vars<-function(y){
   reduce(map(state, function(x){
@@ -35,7 +36,8 @@ B01001_Vars<-c("B01001_001",
                "B01001_049")
 
 B01001 <-get_vars(B01001_Vars)
- 
+B01001$pop_tot<-B01001$B01001_001E
+
 B01001$under18<-(B01001$B01001_003E
                  +B01001$B01001_004E
                  +B01001$B01001_005E
@@ -60,12 +62,21 @@ B01001$over65<-(B01001$B01001_020E
 
 B01001$P_Female<-(B01001$B01001_001E-B01001$B01001_002E)/B01001$B01001_001E
 
+B01001$pop_tot[B01001$pop_tot == "NaN"]<-NA
 B01001$under18[B01001$under18 == "NaN"]<-NA
 B01001$over65[B01001$over65 == "NaN"]<-NA
 B01001$P_Female[B01001$P_Female == "NaN"]<-NA
 
-B01001<-B01001 %>% select(GEOID, under18, over65, P_Female)
+B01001<-B01001 %>% select(GEOID, pop_tot, under18, over65, P_Female)
 
+#B11016: Households
+#https://data.census.gov/cedsci/table?q=Households&d=ACS%205-Year%20Estimates%20Detailed%20Tables&tid=ACSDT5Y2018.B11016&hidePreview=false
+B11016_Vars<-c("B11016_001")
+
+B11016 <-get_vars(B11016_Vars)
+B11016$hh_tot<-B11016$B11016_001E
+B11016$hh_tot[B11016$hh_tot == "NaN"]<-NA
+B11016<-B11016 %>% select(GEOID, hh_tot)
 
 #B02001: Race ----
 #https://factfinder.census.gov/faces/tableservices/jsf/pages/productview.xhtml?pid=ACS_16_5YR_B02001&prodType=table
@@ -94,20 +105,32 @@ B02001$PNonwhite[B02001$PNonwhite == "NaN"]<-NA
 
 B02001<-B02001 %>% select(GEOID, PWhite, PBlack, PAIAN, PAsian, PNonwhite)
 
-#B03001: Ethnicity ----
-#https://factfinder.census.gov/faces/tableservices/jsf/pages/productview.xhtml?pid=ACS_16_5YR_B03001&prodType=table
-B03001_Vars<-c("B03001_001",
-               "B03001_003")
+#B03002: Ethnicity + Non-Hispanic White
+#https://data.census.gov/cedsci/table?q=non%20hispanic%20white&tid=ACSDT1Y2019.B03002&hidePreview=false
+B03002_Vars<-c("B03002_001", 
+               "B03002_003",
+               "B03002_004",
+               "B03002_005",
+               "B03002_006",
+               "B03002_007",
+               "B03002_008",
+               "B03002_009",
+               "B03002_012")
+B03002<-get_vars(B03002_Vars)
 
+B03002$PNH_White<-B03002$B03002_003E/B03002$B03002_001E
+B03002$PNH_Black<-B03002$B03002_004E/B03002$B03002_001E
+B03002$PNH_Asian<-B03002$B03002_006E/B03002$B03002_001E
+B03002$PNH_Other<-(B03002$B03002_005E+B03002$B03002_007E+B03002$B03002_008E+B03002$B03002_009E)/B03002$B03002_001E
+B03002$PLatino<-B03002$B03002_012E/B03002$B03002_001E
 
+B03002$PNH_White[B03002$PNH_White=="NaN"]<-NA
+B03002$PNH_Black[B03002$PNH_Black=="NaN"]<-NA
+B03002$PNH_Asian[B03002$PNH_Asian=="NaN"]<-NA
+B03002$PNH_Other[B03002$PNH_Other=="NaN"]<-NA
+B03002$PLatino[B03002$PLatino == "NaN"]<-NA
 
-B03001<-get_vars(B03001_Vars)
-
-B03001$PLatino<-B03001$B03001_003E/B03001$B03001_001E
-
-B03001$PLatino[B03001$PLatino == "NaN"]<-NA
-
-B03001<-B03001 %>% select(GEOID, PLatino)
+B03002<-B03002 %>% select(GEOID, PNH_White, PNH_Black, PNH_Asian, PNH_Other, PLatino)
 
 #B05002: Foreign Born ----
 #https://factfinder.census.gov/faces/tableservices/jsf/pages/productview.xhtml?pid=ACS_16_5YR_B05002&prodType=table
@@ -170,6 +193,7 @@ B19301$PCI[B19013$PCI == "NaN"]<-NA
 B19301<-B19301 %>% select(GEOID, PCI)
 
 #C24050: Industry by Occupation (Service Occupations) ----
+#https://data.census.gov/cedsci/table?q=C24050&tid=ACSDT1Y2019.C24050&hidePreview=false
 C24050_Vars<-c("C24050_001E",
               "C24050_029E")
 
@@ -275,7 +299,23 @@ B08303$Commute[B08303$Commute == "NaN"]<-NA
 
 B08303<-B08303 %>% select(GEOID, Commute)
 
+#Vehicles Available (Households with no vehicles available)
+B25044_Vars<-c(
+  "B25044_001",
+  "B25044_003",
+  "B25044_009"
+)
+
+B25044<-get_vars(B25044_Vars)
+
+B25044$P_NoCar<-(B25044$B25044_003E+B25044$B25044_009E)/B25044$B25044_001E
+B25044$P_NoCar[B25044$P_NoCar == "NaN"]<-NA
+B25044<-B25044 %>% select(GEOID, P_NoCar)
+
 #S2401: Essential Workers ----
+# Uses CMAP strategy for identifying workers in essential idustries
+#https://github.com/CMAP-REPOS/essentialworkers/blob/master/essential%20occupations%20script.R
+
 # essential worker assignments, identified by variable ID.
 #  no  = not essential
 #  na  = a subtotal in the table. Disregard.
@@ -391,9 +431,11 @@ final <-final %>% select(GEOID, total_workers:transport)
 rm(occ_class, S2401, S2401_clean, varnames)
 
 #Merge Together----
-acs_covars<-list(B01001, B02001, B03001, B05002, B11001, B17001, B19013, B25002, B25003, B25077, B25106, B25064, C24050, B07003, B08303, B19301, final) %>% 
+acs_covars<-list(B01001, B11016, B02001, B03002, B05002, B11001, B17001, B19013, B25002, B25003, B25077, B25106, B25064, C24050, B07003, B08303, B19301, B25044, final) %>% 
   reduce(left_join, by="GEOID")
 
 write_rds(acs_covars, "data/acs_covars.rds")
 
-rm(B01001, B02001, B03001, B05002, B11001, B17001, B19013, B25002, B25003, B25077, B25106, B25064, C24050, B07003, B08303, B19301, final)
+rm(B01001, B02001, B03002, B05002, B11001, B11016, B17001, B19013, B25002, B25003, B25044, B25077, B25106, B25064, C24050, B07003, B08303, B19301, final)
+rm(list=ls(pattern="^B"), C24050_Vars, occ_class_list)
+

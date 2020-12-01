@@ -32,3 +32,7 @@ eviction_lab_tracts<-eviction_lab_tracts %>%
     NAME == "Indianapolis city (balance)" ~ "Indianapolis",
     TRUE ~ as.character(NAME)
   ))
+
+saveRDS(eviction_lab_tracts, "data/eviction_lab_tracts.rds")
+
+rm(eviction_lab_place_names, get_tracts_place)
