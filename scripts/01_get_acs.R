@@ -430,6 +430,11 @@ final <- S2401_clean %>%
 final <-final %>% select(GEOID, total_workers:transport)
 rm(occ_class, S2401, S2401_clean, varnames)
 
+# Grab National County Typology
+co_ty<-read_csv("https://sites.psu.edu/psucz/files/2018/09/counties10-zqvz0r.csv", col_types = cols(OUT10 = col_character())) %>% dplyr::select(FIPS, REP10)
+  
+co_ty<-co_ty %>% mutate(FIPS = str_pad(FIPS, width = 5, side="left", pad="0"))
+
 #Merge Together----
 acs_covars<-list(B01001, B11016, B02001, B03002, B05002, B11001, B17001, B19013, B25002, B25003, B25077, B25106, B25064, C24050, B07003, B08303, B19301, B25044, final) %>% 
   reduce(left_join, by="GEOID")

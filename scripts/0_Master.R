@@ -1,10 +1,20 @@
 library(pacman)
-p_load(corrplot, factoextra, FactoMineR, readr,simputation, sf, tidyverse, tidycensus, tigris, WaverR)
+p_load(corrplot, factoextra, FactoMineR, purrr, readr, sf, tidyverse, tidycensus, tigris)
 
 census_api_key("3e50904445914dd0fd03025e7d222c5f097016c0")
 DL_Year<-2018
 survey <- "acs5"
 geo<-"tract"
+state<-fips_codes %>% select(state_code, state_name) %>% 
+  distinct() %>% 
+  filter(!state_name %in% c("American Samoa", "Guam", "Northern Mariana Islands", "Puerto Rico", "U.S. Minor Outlying Islands", "U.S. Virgin Islands")) %>% 
+  select(state_code)
+
+
+
+
+
+
 
 #Download Eviction Lab Data
 #https://evictionlab.org/eviction-tracking/get-the-data/
@@ -87,12 +97,19 @@ dataset_cluster_pca<-dataset_cluster %>%
 # dataset<-st_filter(trt, place_geo)
 # ggplot()+geom_sf(data=dataset)
 
-
-fviz_nbclust(dataset_cluster_pca, kmeans, method = "gap_stat")
-
+tracts.pca <- PCA(dataset_cluster, scale=TRUE, quali.sup=c(1:2), graph = FALSE)
+plot.PCA(tracts.pca, axes=c(1, 2), choix="var")
+fviz_nbclust(dataset_cluster_pca, kmeans, method = "gap_stat", nboot=50)
 fviz_nbclust(dataset_cluster_pca, kmeans, method = "wss")
+fviz_nbclust(dataset_cluster_pca, kmeans, method = "silhouette")
+test<-NbClust::NbClust(data=tractvars, distance = "euclidean", method = "Ward")
 
-tracts.pca <- PCA(dataset_cluster_pca, graph = FALSE)
+p_load(NbClust)
+
+p_load(FactoInvestigate)
+Investigate(tracts.pca)
+dimdesc(tracts.pca)
+
 #print(tracts.pca)
 
 tractseig.val <- get_eigenvalue(tracts.pca)
